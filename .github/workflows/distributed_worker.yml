@@ -1,7 +1,7 @@
 name: Distributed Checker Worker
 on:
   schedule:
-    - cron: '* * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
           BATCH_SIZE: '50'
           CONCURRENCY: '50'
           MAX_IDLE_ROUNDS: '2'
-          MAX_COMBOS_PER_RUN: '500'
+          MAX_COMBOS_PER_RUN: '2000'
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python worker/worker.py
