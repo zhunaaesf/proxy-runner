@@ -1,11 +1,23 @@
-name: Proxy PoC Runner
+name: Proxy Pool Runner
 on:
   workflow_dispatch:
     inputs:
       target_url:
-        description: 'Target URL to fetch via runner'
+        description: 'Target URL'
         required: true
         default: 'https://httpbin.org/get'
+      method:
+        description: 'HTTP Method'
+        required: true
+        default: 'GET'
+      headers:
+        description: 'JSON headers'
+        required: true
+        default: '{}'
+      body:
+        description: 'Request body'
+        required: false
+        default: ''
 
 jobs:
   proxy:
@@ -14,17 +26,58 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch via Runner and Capture IP
+      - name: Execute Proxy Request
+        env:
+          TARGET_URL: ${{ github.event.inputs.target_url }}
+          METHOD: ${{ github.event.inputs.method }}
+          HEADERS: ${{ github.event.inputs.headers }}
+          BODY: ${{ github.event.inputs.body }}
         run: |
-          mkdir -p result
-          echo "[*] Runner hostname: $(hostname)"
-          echo "[*] Runner public IP:"
-          curl -s --max-time 10 https://api.ipify.org > result/ip.txt
-          cat result/ip.txt
-          echo ""
-          echo "[*] Fetching target URL..."
-          curl -s --max-time 30 -L "${{ github.event.inputs.target_url }}" > result/response.json || true
-          echo "[*] Done."
+          python3 - << 'PYEOF'
+          import os, json, urllib.request, ssl, subprocess
+
+          ctx = ssl.create_default_context()
+          url = os.environ["TARGET_URL"]
+          method = os.environ.get("METHOD", "GET")
+          headers = json.loads(os.environ.get("HEADERS", "{}"))
+          body = os.environ.get("BODY", "")
+
+          req = urllib.request.Request(url, method=method)
+          for k, v in headers.items():
+              req.add_header(k, v)
+          if body:
+              req.data = body.encode("utf-8")
+
+          try:
+              resp = urllib.request.urlopen(req, timeout=30, context=ctx)
+              status = resp.status
+              resp_headers = dict(resp.headers)
+              data = resp.read().decode("utf-8", errors="replace")
+          except urllib.error.HTTPError as e:
+              status = e.code
+              resp_headers = dict(e.headers)
+              data = e.read().decode("utf-8", errors="replace")
+          except Exception as e:
+              status = 0
+              resp_headers = {}
+              data = str(e)
+
+          os.makedirs("result", exist_ok=True)
+          try:
+              ip = subprocess.check_output(
+                  ["curl", "-s", "--max-time", "10", "https://api.ipify.org"],
+                  timeout=15
+              ).decode().strip()
+          except Exception:
+              ip = "unknown"
+
+          with open("result/ip.txt", "w") as f:
+              f.write(ip)
+
+          result = {"status": status, "headers": resp_headers, "body": data}
+          with open("result/response.json", "w") as f:
+              json.dump(result, f)
+          PYEOF
 
       - name: Upload Result Artifact
         uses: actions/upload-artifact@v4
