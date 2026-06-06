@@ -1,0 +1,44 @@
+name: Distributed Checker Worker
+on:
+  workflow_dispatch:
+    inputs:
+      coordinator_host:
+        description: 'Coordinator Host URL'
+        required: true
+      batch_size:
+        description: 'Batch size per fetch'
+        required: true
+        default: '50'
+      concurrency:
+        description: 'Internal concurrency per worker'
+        required: true
+        default: '50'
+      max_idle_rounds:
+        description: 'Max idle rounds before exit'
+        required: true
+        default: '3'
+
+jobs:
+  checker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install httpx
+
+      - name: Run Worker
+        env:
+          COORDINATOR_HOST: ${{ github.event.inputs.coordinator_host }}
+          BATCH_SIZE: ${{ github.event.inputs.batch_size }}
+          CONCURRENCY: ${{ github.event.inputs.concurrency }}
+          MAX_IDLE_ROUNDS: ${{ github.event.inputs.max_idle_rounds }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python worker/worker.py
