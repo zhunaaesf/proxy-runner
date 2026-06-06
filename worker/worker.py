@@ -12,7 +12,7 @@ REPO = os.environ.get("GITHUB_REPOSITORY", "unknown")
 BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "50"))
 CONCURRENCY = int(os.environ.get("CONCURRENCY", "50"))
 MAX_IDLE_ROUNDS = int(os.environ.get("MAX_IDLE_ROUNDS", "3"))
-MAX_COMBOS_PER_RUN = int(os.environ.get("MAX_COMBOS_PER_RUN", "500"))
+MAX_COMBOS_PER_RUN = int(os.environ.get("MAX_COMBOS_PER_RUN", "2000"))
 
 
 def safe_print(msg: str):
