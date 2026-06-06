@@ -1,0 +1,33 @@
+name: Proxy PoC Runner
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target URL to fetch via runner'
+        required: true
+        default: 'https://httpbin.org/get'
+
+jobs:
+  proxy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch via Runner and Capture IP
+        run: |
+          mkdir -p result
+          echo "[*] Runner hostname: $(hostname)"
+          echo "[*] Runner public IP:"
+          curl -s --max-time 10 https://api.ipify.org > result/ip.txt
+          cat result/ip.txt
+          echo ""
+          echo "[*] Fetching target URL..."
+          curl -s --max-time 30 -L "${{ github.event.inputs.target_url }}" > result/response.json || true
+          echo "[*] Done."
+
+      - name: Upload Result Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxy-result-${{ github.run_id }}
+          path: result/
