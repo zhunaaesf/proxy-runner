@@ -6,7 +6,7 @@ import httpx
 import json
 from check_engine import check_account
 
-HOST = os.environ.get("COORDINATOR_HOST", "http://127.0.0.1:5000")
+HOST = os.environ.get("COORDINATOR_HOST", "http://161.35.233.33:5000")
 WORKER_ID = os.environ.get("GITHUB_RUN_ID", f"local-{int(time.time())}")
 REPO = os.environ.get("GITHUB_REPOSITORY", "unknown")
 BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "50"))
