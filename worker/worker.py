@@ -12,6 +12,7 @@ REPO = os.environ.get("GITHUB_REPOSITORY", "unknown")
 BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "50"))
 CONCURRENCY = int(os.environ.get("CONCURRENCY", "50"))
 MAX_IDLE_ROUNDS = int(os.environ.get("MAX_IDLE_ROUNDS", "3"))
+MAX_COMBOS_PER_RUN = int(os.environ.get("MAX_COMBOS_PER_RUN", "500"))
 
 
 def safe_print(msg: str):
@@ -21,6 +22,7 @@ def safe_print(msg: str):
 async def main():
     safe_print(f"[*] Worker starting | ID={WORKER_ID} | Repo={REPO}")
     safe_print(f"[*] Coordinator: {HOST}")
+    safe_print(f"[*] Limit: {MAX_COMBOS_PER_RUN} combos per run, then exit")
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
         # Register
@@ -34,6 +36,11 @@ async def main():
         total_checked = 0
 
         while idle_rounds < MAX_IDLE_ROUNDS:
+            # Hard cap: exit immediately after reaching limit
+            if total_checked >= MAX_COMBOS_PER_RUN:
+                safe_print(f"[*] Reached max combos per run ({MAX_COMBOS_PER_RUN}), exiting to rotate IP")
+                break
+
             # Fetch batch
             try:
                 r = await client.post(f"{HOST}/get_task", json={"worker_id": WORKER_ID, "batch_size": BATCH_SIZE})
@@ -82,7 +89,7 @@ async def main():
             # Submit results
             try:
                 r = await client.post(f"{HOST}/submit", json={"worker_id": WORKER_ID, "results": results})
-                safe_print(f"[+] Submitted {len(results)} results | Total checked: {total_checked} | HTTP {r.status_code}")
+                safe_print(f"[+] Submitted {len(results)} results | Total checked: {total_checked}/{MAX_COMBOS_PER_RUN} | HTTP {r.status_code}")
             except Exception as e:
                 safe_print(f"[-] Submit error: {e}")
 
